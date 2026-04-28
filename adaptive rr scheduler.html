@@ -1,0 +1,748 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Adaptive Round Robin Scheduler</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&family=Bebas+Neue&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --bg: #0a0a0f;
+  --surface: #111118;
+  --card: #16161f;
+  --border: #ffffff10;
+  --border2: #ffffff1a;
+  --text: #f0f0f5;
+  --muted: #888899;
+  --dim: #444455;
+  --accent: #e8ff47;
+  --accent2: #47ffe8;
+  --accent3: #ff4778;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'DM Sans', sans-serif;
+  min-height: 100vh;
+  background-image: radial-gradient(ellipse 80% 50% at 50% -20%, #ffffff08, transparent);
+}
+
+header {
+  padding: 48px 40px 0;
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+.header-top {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  margin-bottom: 6px;
+}
+
+h1 {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: clamp(3rem, 8vw, 6rem);
+  letter-spacing: 2px;
+  line-height: 1;
+  color: var(--text);
+}
+
+h1 span { color: var(--accent); }
+
+.tagline {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 12px;
+  color: var(--muted);
+  letter-spacing: 1px;
+  margin-bottom: 40px;
+}
+
+.tagline em {
+  color: var(--accent2);
+  font-style: normal;
+}
+
+main {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 0 40px 80px;
+  display: grid;
+  grid-template-columns: 360px 1fr;
+  gap: 24px;
+  align-items: start;
+}
+
+/* ── LEFT PANEL ── */
+.panel {
+  background: var(--card);
+  border: 1px solid var(--border2);
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+.panel-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.panel-label {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+
+.panel-body { padding: 20px; }
+
+/* Input fields */
+.field { margin-bottom: 14px; }
+
+.field label {
+  display: block;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+
+.field input {
+  width: 100%;
+  background: var(--surface);
+  border: 1px solid var(--border2);
+  border-radius: 8px;
+  padding: 10px 14px;
+  color: var(--text);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.field input:focus { border-color: var(--accent); }
+.field input::placeholder { color: var(--dim); }
+
+.add-btn {
+  width: 100%;
+  padding: 11px;
+  background: var(--accent);
+  color: #0a0a0f;
+  border: none;
+  border-radius: 8px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  cursor: pointer;
+  transition: opacity 0.2s, transform 0.1s;
+  margin-bottom: 10px;
+}
+
+.add-btn:hover { opacity: 0.9; }
+.add-btn:active { transform: scale(0.98); }
+
+.demo-btn {
+  width: 100%;
+  padding: 10px;
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid var(--border2);
+  border-radius: 8px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 12px;
+  letter-spacing: 1px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.demo-btn:hover { border-color: var(--accent2); color: var(--accent2); }
+
+/* Process queue */
+.queue-section { margin-top: 20px; }
+
+.queue-title {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.clear-link {
+  color: var(--accent3);
+  cursor: pointer;
+  font-size: 10px;
+  letter-spacing: 1px;
+  border: none;
+  background: none;
+  font-family: 'IBM Plex Mono', monospace;
+  transition: opacity 0.2s;
+}
+
+.clear-link:hover { opacity: 0.7; }
+
+.proc-list { display: flex; flex-direction: column; gap: 6px; min-height: 60px; }
+
+.proc-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  animation: slideIn 0.2s ease;
+}
+
+@keyframes slideIn {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.proc-chip {
+  width: 30px;
+  height: 30px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.proc-name {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 13px;
+  font-weight: 500;
+  flex: 1;
+}
+
+.proc-burst {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.del {
+  background: none;
+  border: none;
+  color: var(--dim);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 2px;
+  transition: color 0.15s;
+}
+
+.del:hover { color: var(--accent3); }
+
+.empty-queue {
+  text-align: center;
+  padding: 24px 0;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 12px;
+  color: var(--dim);
+}
+
+/* Run button */
+.run-btn {
+  width: 100%;
+  margin-top: 16px;
+  padding: 14px;
+  background: linear-gradient(135deg, #e8ff47, #b8ff00);
+  color: #0a0a0f;
+  border: none;
+  border-radius: 10px;
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 20px;
+  letter-spacing: 3px;
+  cursor: pointer;
+  transition: opacity 0.2s, transform 0.1s;
+}
+
+.run-btn:hover { opacity: 0.92; }
+.run-btn:active { transform: scale(0.99); }
+
+/* ── RIGHT PANEL ── */
+.right { display: flex; flex-direction: column; gap: 20px; }
+
+.result-panel {
+  background: var(--card);
+  border: 1px solid var(--border2);
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+/* Quantum bar */
+.q-bar {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.q-stat {
+  flex: 1;
+  padding: 16px 20px;
+  border-right: 1px solid var(--border);
+}
+
+.q-stat:last-child { border-right: none; }
+
+.q-label {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+
+.q-value {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 2rem;
+  letter-spacing: 1px;
+  color: var(--accent);
+}
+
+.q-value.teal { color: var(--accent2); }
+.q-value.pink { color: var(--accent3); }
+.q-value.white { color: var(--text); }
+
+/* Gantt */
+.gantt-area { padding: 20px; }
+
+.section-lbl {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 12px;
+}
+
+.gantt-scroll { overflow-x: auto; padding-bottom: 4px; }
+
+.gantt-track {
+  display: flex;
+  gap: 3px;
+  min-height: 52px;
+  align-items: stretch;
+}
+
+.g-blk {
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+  font-weight: 600;
+  color: #000;
+  min-width: 20px;
+  flex-shrink: 0;
+  position: relative;
+  cursor: default;
+  animation: popUp 0.25s ease both;
+}
+
+@keyframes popUp {
+  from { transform: scaleY(0.3); opacity: 0; }
+  to { transform: scaleY(1); opacity: 1; }
+}
+
+.g-blk:hover .tooltip {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+.tooltip {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%) translateY(4px);
+  background: var(--surface);
+  border: 1px solid var(--border2);
+  border-radius: 6px;
+  padding: 5px 10px;
+  font-size: 10px;
+  white-space: nowrap;
+  color: var(--text);
+  opacity: 0;
+  transition: all 0.15s;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.gantt-times {
+  display: flex;
+  gap: 3px;
+  margin-top: 6px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px;
+  color: var(--dim);
+  padding-left: 1px;
+}
+
+/* Exec log */
+.log-area { padding: 0 20px 20px; }
+
+.log-scroll {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 14px;
+  max-height: 160px;
+  overflow-y: auto;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+  line-height: 1.9;
+  color: var(--muted);
+}
+
+.log-scroll::-webkit-scrollbar { width: 3px; }
+.log-scroll::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+.log-run { color: var(--accent2); }
+.log-done { color: var(--accent); }
+.log-q { color: var(--accent3); }
+
+/* Results table */
+.tbl-area { padding: 0 20px 20px; }
+
+.res-tbl {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 12px;
+}
+
+.res-tbl th {
+  padding: 8px 10px;
+  text-align: left;
+  font-size: 10px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--muted);
+  border-bottom: 1px solid var(--border);
+  font-weight: 400;
+}
+
+.res-tbl td {
+  padding: 9px 10px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+}
+
+.res-tbl tr:last-child td { border-bottom: none; }
+.res-tbl tr:hover td { background: rgba(255,255,255,0.02); }
+
+.avg-row td {
+  color: var(--muted) !important;
+  border-top: 1px solid var(--border2) !important;
+  font-size: 11px;
+}
+
+.avg-row td.val { color: var(--accent) !important; font-weight: 500; }
+
+/* Placeholder */
+.placeholder {
+  padding: 60px 20px;
+  text-align: center;
+}
+
+.placeholder-icon {
+  font-size: 40px;
+  margin-bottom: 14px;
+  opacity: 0.3;
+}
+
+.placeholder p {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 12px;
+  color: var(--dim);
+  line-height: 1.7;
+}
+
+@media (max-width: 800px) {
+  main { grid-template-columns: 1fr; padding: 0 20px 60px; }
+  header { padding: 32px 20px 0; }
+  .q-bar { flex-wrap: wrap; }
+  .q-stat { min-width: 50%; }
+}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Adaptive <span>RR</span> Scheduler</h1>
+  <p class="tagline">Q = ⌈ Σ remaining / n ⌉ &nbsp;·&nbsp; quantum recomputed <em>every round</em></p>
+</header>
+
+<main>
+  <!-- LEFT -->
+  <div>
+    <div class="panel">
+      <div class="panel-header">
+        <div class="dot"></div>
+        <span class="panel-label">Process Input</span>
+      </div>
+      <div class="panel-body">
+        <div class="field">
+          <label>Process Name</label>
+          <input type="text" id="pName" placeholder="P1" value="P1">
+        </div>
+        <div class="field">
+          <label>Burst Time (ms)</label>
+          <input type="number" id="pBurst" placeholder="10" min="1">
+        </div>
+        <div class="field">
+          <label>Arrival Time</label>
+          <input type="number" id="pArr" placeholder="0" min="0" value="0">
+        </div>
+        <button class="add-btn" onclick="addProc()">+ ADD PROCESS</button>
+        <button class="demo-btn" onclick="loadDemo()">Load demo data (5 processes)</button>
+
+        <div class="queue-section">
+          <div class="queue-title">
+            <span>Ready Queue</span>
+            <button class="clear-link" onclick="clearAll()">CLEAR ALL</button>
+          </div>
+          <div class="proc-list" id="procList">
+            <div class="empty-queue">No processes added yet.</div>
+          </div>
+        </div>
+
+        <button class="run-btn" onclick="runSim()">RUN SIMULATION</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT -->
+  <div class="right">
+    <div class="result-panel" id="resultPanel">
+      <div class="placeholder" id="placeholder">
+        <div class="placeholder-icon">⚙</div>
+        <p>Add processes and click<br><strong>Run Simulation</strong> to see<br>the Gantt chart and metrics.</p>
+      </div>
+
+      <div id="resultContent" style="display:none;">
+        <!-- Stats bar -->
+        <div class="q-bar">
+          <div class="q-stat">
+            <div class="q-label">Avg Waiting Time</div>
+            <div class="q-value" id="sWT">—</div>
+          </div>
+          <div class="q-stat">
+            <div class="q-label">Avg Turnaround</div>
+            <div class="q-value teal" id="sTAT">—</div>
+          </div>
+          <div class="q-stat">
+            <div class="q-label">Context Switches</div>
+            <div class="q-value pink" id="sCS">—</div>
+          </div>
+          <div class="q-stat">
+            <div class="q-label">Total Time</div>
+            <div class="q-value white" id="sTT">—</div>
+          </div>
+        </div>
+
+        <!-- Gantt -->
+        <div class="gantt-area">
+          <div class="section-lbl">Gantt Chart</div>
+          <div class="gantt-scroll">
+            <div class="gantt-track" id="ganttTrack"></div>
+            <div class="gantt-times" id="ganttTimes"></div>
+          </div>
+        </div>
+
+        <!-- Log -->
+        <div class="log-area">
+          <div class="section-lbl">Execution Log</div>
+          <div class="log-scroll" id="logScroll"></div>
+        </div>
+
+        <!-- Table -->
+        <div class="tbl-area">
+          <div class="section-lbl">Process Results</div>
+          <table class="res-tbl">
+            <thead>
+              <tr>
+                <th>Process</th>
+                <th>Burst</th>
+                <th>Arrival</th>
+                <th>Finish</th>
+                <th>Turnaround</th>
+                <th>Waiting</th>
+              </tr>
+            </thead>
+            <tbody id="resTbl"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script>
+const COLORS = ['#e8ff47','#47ffe8','#ff4778','#ff9f47','#b847ff','#47b8ff','#ff47c8','#47ff8e','#ffb347','#47d4ff'];
+const DARK   = ['#000','#000','#fff','#000','#fff','#000','#fff','#000','#000','#000'];
+
+let procs = [], pid = 1;
+
+function addProc() {
+  const name  = document.getElementById('pName').value.trim() || ('P' + pid);
+  const burst = parseInt(document.getElementById('pBurst').value);
+  const arr   = parseInt(document.getElementById('pArr').value) || 0;
+  if (!burst || burst < 1) { alert('Enter a valid burst time.'); return; }
+  const ci = (pid - 1) % COLORS.length;
+  procs.push({ id: pid, name, burst, arr, color: COLORS[ci], dark: DARK[ci] });
+  pid++;
+  document.getElementById('pName').value  = 'P' + pid;
+  document.getElementById('pBurst').value = '';
+  document.getElementById('pArr').value   = '0';
+  document.getElementById('pBurst').focus();
+  renderList();
+}
+
+function delProc(id) { procs = procs.filter(p => p.id !== id); renderList(); }
+
+function renderList() {
+  const el = document.getElementById('procList');
+  if (!procs.length) { el.innerHTML = '<div class="empty-queue">No processes added yet.</div>'; return; }
+  el.innerHTML = procs.map(p => `
+    <div class="proc-item">
+      <div class="proc-chip" style="background:${p.color}22; color:${p.color}; border:1px solid ${p.color}44;">${p.name.substring(0,2)}</div>
+      <span class="proc-name" style="color:${p.color};">${p.name}</span>
+      <span class="proc-burst">BT:${p.burst} AT:${p.arr}</span>
+      <button class="del" onclick="delProc(${p.id})">✕</button>
+    </div>`).join('');
+}
+
+function loadDemo() {
+  procs = []; pid = 1;
+  [['P1',10,0],['P2',5,0],['P3',8,0],['P4',3,0],['P5',6,0]].forEach(([n,b,a]) => {
+    const ci = (pid-1) % COLORS.length;
+    procs.push({ id: pid, name: n, burst: b, arr: a, color: COLORS[ci], dark: DARK[ci] });
+    pid++;
+  });
+  document.getElementById('pName').value = 'P' + pid;
+  renderList();
+}
+
+function clearAll() {
+  procs = []; pid = 1;
+  document.getElementById('pName').value  = 'P1';
+  document.getElementById('pBurst').value = '';
+  document.getElementById('pArr').value   = '0';
+  renderList();
+  document.getElementById('placeholder').style.display = 'block';
+  document.getElementById('resultContent').style.display = 'none';
+}
+
+function calcQ(q) { return Math.max(1, Math.ceil(q.reduce((s,p)=>s+p.rem,0) / q.length)); }
+
+function runSim() {
+  if (!procs.length) { alert('Add at least one process!'); return; }
+
+  const sim = procs.map(p => ({ ...p, rem: p.burst, ct: 0 }));
+  sim.sort((a,b) => a.arr - b.arr);
+
+  let time = 0, cs = 0, gantt = [], log = [];
+  let queue = [], pending = [...sim];
+
+  const admit = t => { pending = pending.filter(p => { if (p.arr <= t) { queue.push(p); return false; } return true; }); };
+  admit(0);
+
+  let safety = 0;
+  while ((queue.length || pending.length) && ++safety < 50000) {
+    if (!queue.length) { time = pending[0].arr; admit(time); continue; }
+    const Q = calcQ(queue);
+    const p = queue.shift();
+    cs++;
+    const exec = Math.min(Q, p.rem);
+    const s = time; time += exec; p.rem -= exec;
+    gantt.push({ name: p.name, color: p.color, dark: p.dark, start: s, end: time, q: Q });
+    admit(time);
+    log.push({ type: 'run', text: `t${s}→${time}: ${p.name} ran ${exec}u  (Q=${Q})  rem=${p.rem}` });
+    if (p.rem === 0) { p.ct = time; log.push({ type: 'done', text: `  ✓ ${p.name} finished` }); }
+    else { queue.push(p); }
+  }
+
+  sim.forEach(p => { p.tat = p.ct - p.arr; p.wt = p.tat - p.burst; });
+  const avgWT  = (sim.reduce((s,p)=>s+p.wt, 0) / sim.length).toFixed(2);
+  const avgTAT = (sim.reduce((s,p)=>s+p.tat,0) / sim.length).toFixed(2);
+
+  document.getElementById('sWT').textContent  = avgWT;
+  document.getElementById('sTAT').textContent = avgTAT;
+  document.getElementById('sCS').textContent  = cs;
+  document.getElementById('sTT').textContent  = time;
+
+  renderGantt(gantt, time);
+  renderLog(log);
+  renderTable(sim, avgWT, avgTAT);
+
+  document.getElementById('placeholder').style.display    = 'none';
+  document.getElementById('resultContent').style.display  = 'block';
+}
+
+function renderGantt(gantt, total) {
+  const unit = Math.max(16, Math.min(64, Math.floor(580 / Math.max(total, 1))));
+  const track = document.getElementById('ganttTrack');
+  track.innerHTML = gantt.map((b, i) => {
+    const w = (b.end - b.start) * unit;
+    return `<div class="g-blk" style="width:${w}px;background:${b.color};color:${b.dark};animation-delay:${i*0.025}s;">
+      ${w > 20 ? b.name : ''}
+      <span class="tooltip">${b.name} · t${b.start}–${b.end} · Q=${b.q}</span>
+    </div>`;
+  }).join('');
+
+  const times = [...new Set([0, ...gantt.map(b => b.end)])].sort((a,b)=>a-b);
+  document.getElementById('ganttTimes').innerHTML = times.map((t, i) => {
+    const w = i === 0 ? 0 : (times[i] - times[i-1]) * unit;
+    return `<span style="display:inline-block;min-width:${w}px;">${t}</span>`;
+  }).join('');
+}
+
+function renderLog(log) {
+  document.getElementById('logScroll').innerHTML = log.map(l =>
+    `<div class="${l.type === 'done' ? 'log-done' : l.type === 'q' ? 'log-q' : 'log-run'}">${l.text}</div>`
+  ).join('');
+}
+
+function renderTable(sim, avgWT, avgTAT) {
+  document.getElementById('resTbl').innerHTML = sim.map(p =>
+    `<tr>
+      <td style="color:${p.color};font-weight:500;">${p.name}</td>
+      <td>${p.burst}</td><td>${p.arr}</td><td>${p.ct}</td>
+      <td>${p.tat}</td><td>${p.wt}</td>
+    </tr>`
+  ).join('') + `<tr class="avg-row">
+    <td colspan="4" style="color:var(--muted);">Averages</td>
+    <td class="val">${avgTAT}</td>
+    <td class="val">${avgWT}</td>
+  </tr>`;
+}
+
+document.getElementById('pBurst').addEventListener('keydown', e => { if (e.key==='Enter') addProc(); });
+document.getElementById('pName').addEventListener('keydown',  e => { if (e.key==='Enter') document.getElementById('pBurst').focus(); });
+</script>
+</body>
+</html>
