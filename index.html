@@ -3,746 +3,1396 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Adaptive Round Robin Scheduler</title>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&family=Bebas+Neue&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<title>Adaptive Time-Quantum Round Robin Scheduler</title>
 <style>
-* { margin: 0; padding: 0; box-sizing: border-box; }
-
 :root {
-  --bg: #0a0a0f;
-  --surface: #111118;
-  --card: #16161f;
-  --border: #ffffff10;
-  --border2: #ffffff1a;
-  --text: #f0f0f5;
-  --muted: #888899;
-  --dim: #444455;
-  --accent: #e8ff47;
-  --accent2: #47ffe8;
-  --accent3: #ff4778;
+  --ink: #f7f8ff;
+  --muted: #a8afc4;
+  --soft: #dce4ff;
+  --bg: #070913;
+  --panel: #111522;
+  --panel-2: #171d2d;
+  --line: rgba(255, 255, 255, 0.12);
+  --line-strong: rgba(255, 255, 255, 0.2);
+  --cyan: #54e1ff;
+  --mint: #58f0a7;
+  --sun: #ffd166;
+  --coral: #ff6b6b;
+  --violet: #a78bfa;
+  --blue: #6aa7ff;
+  --shadow: 0 24px 80px rgba(0, 0, 0, 0.35);
+  --radius: 8px;
 }
+
+* { box-sizing: border-box; }
+
+html { scroll-behavior: smooth; }
 
 body {
-  background: var(--bg);
-  color: var(--text);
-  font-family: 'DM Sans', sans-serif;
+  margin: 0;
   min-height: 100vh;
-  background-image: radial-gradient(ellipse 80% 50% at 50% -20%, #ffffff08, transparent);
+  background:
+    linear-gradient(120deg, rgba(84, 225, 255, 0.09), transparent 34%),
+    linear-gradient(235deg, rgba(255, 107, 107, 0.1), transparent 28%),
+    #070913;
+  color: var(--ink);
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  letter-spacing: 0;
 }
 
-header {
-  padding: 48px 40px 0;
-  max-width: 1100px;
+button, input, select { font: inherit; }
+
+button {
+  border: 0;
+  cursor: pointer;
+}
+
+.shell {
+  width: min(1180px, calc(100% - 32px));
   margin: 0 auto;
 }
 
-.header-top {
-  display: flex;
-  align-items: baseline;
-  gap: 16px;
-  margin-bottom: 6px;
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  backdrop-filter: blur(18px);
+  background: rgba(7, 9, 19, 0.82);
+  border-bottom: 1px solid var(--line);
 }
 
-h1 {
-  font-family: 'Bebas Neue', sans-serif;
-  font-size: clamp(3rem, 8vw, 6rem);
-  letter-spacing: 2px;
-  line-height: 1;
-  color: var(--text);
-}
-
-h1 span { color: var(--accent); }
-
-.tagline {
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 12px;
-  color: var(--muted);
-  letter-spacing: 1px;
-  margin-bottom: 40px;
-}
-
-.tagline em {
-  color: var(--accent2);
-  font-style: normal;
-}
-
-main {
-  max-width: 1100px;
-  margin: 0 auto;
-  padding: 0 40px 80px;
-  display: grid;
-  grid-template-columns: 360px 1fr;
-  gap: 24px;
-  align-items: start;
-}
-
-/* ── LEFT PANEL ── */
-.panel {
-  background: var(--card);
-  border: 1px solid var(--border2);
-  border-radius: 16px;
-  overflow: hidden;
-}
-
-.panel-header {
-  padding: 16px 20px;
-  border-bottom: 1px solid var(--border);
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.panel-label {
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 11px;
-  letter-spacing: 2px;
-  text-transform: uppercase;
-  color: var(--muted);
-}
-
-.dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
-
-.panel-body { padding: 20px; }
-
-/* Input fields */
-.field { margin-bottom: 14px; }
-
-.field label {
-  display: block;
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 10px;
-  letter-spacing: 1.5px;
-  text-transform: uppercase;
-  color: var(--muted);
-  margin-bottom: 6px;
-}
-
-.field input {
-  width: 100%;
-  background: var(--surface);
-  border: 1px solid var(--border2);
-  border-radius: 8px;
-  padding: 10px 14px;
-  color: var(--text);
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 14px;
-  outline: none;
-  transition: border-color 0.2s;
-}
-
-.field input:focus { border-color: var(--accent); }
-.field input::placeholder { color: var(--dim); }
-
-.add-btn {
-  width: 100%;
-  padding: 11px;
-  background: var(--accent);
-  color: #0a0a0f;
-  border: none;
-  border-radius: 8px;
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 13px;
-  font-weight: 600;
-  letter-spacing: 1px;
-  cursor: pointer;
-  transition: opacity 0.2s, transform 0.1s;
-  margin-bottom: 10px;
-}
-
-.add-btn:hover { opacity: 0.9; }
-.add-btn:active { transform: scale(0.98); }
-
-.demo-btn {
-  width: 100%;
-  padding: 10px;
-  background: transparent;
-  color: var(--muted);
-  border: 1px solid var(--border2);
-  border-radius: 8px;
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 12px;
-  letter-spacing: 1px;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.demo-btn:hover { border-color: var(--accent2); color: var(--accent2); }
-
-/* Process queue */
-.queue-section { margin-top: 20px; }
-
-.queue-title {
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 10px;
-  letter-spacing: 2px;
-  text-transform: uppercase;
-  color: var(--muted);
-  margin-bottom: 10px;
+.nav {
+  min-height: 72px;
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 24px;
 }
 
-.clear-link {
-  color: var(--accent3);
-  cursor: pointer;
-  font-size: 10px;
-  letter-spacing: 1px;
-  border: none;
-  background: none;
-  font-family: 'IBM Plex Mono', monospace;
-  transition: opacity 0.2s;
-}
-
-.clear-link:hover { opacity: 0.7; }
-
-.proc-list { display: flex; flex-direction: column; gap: 6px; min-height: 60px; }
-
-.proc-item {
+.brand {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 8px 12px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  animation: slideIn 0.2s ease;
+  gap: 12px;
+  min-width: 220px;
 }
 
-@keyframes slideIn {
-  from { opacity: 0; transform: translateY(-6px); }
-  to { opacity: 1; transform: translateY(0); }
+.brand-mark {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius);
+  display: grid;
+  place-items: center;
+  color: #071018;
+  font-weight: 900;
+  background: linear-gradient(135deg, var(--cyan), var(--mint));
+  box-shadow: 0 0 34px rgba(84, 225, 255, 0.25);
 }
 
-.proc-chip {
-  width: 30px;
-  height: 30px;
-  border-radius: 6px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 11px;
-  font-weight: 600;
-  flex-shrink: 0;
+.brand strong {
+  display: block;
+  font-size: 15px;
 }
 
-.proc-name {
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 13px;
-  font-weight: 500;
-  flex: 1;
-}
-
-.proc-burst {
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 11px;
+.brand span {
+  display: block;
   color: var(--muted);
-}
-
-.del {
-  background: none;
-  border: none;
-  color: var(--dim);
-  cursor: pointer;
-  font-size: 14px;
-  line-height: 1;
-  padding: 2px;
-  transition: color 0.15s;
-}
-
-.del:hover { color: var(--accent3); }
-
-.empty-queue {
-  text-align: center;
-  padding: 24px 0;
-  font-family: 'IBM Plex Mono', monospace;
   font-size: 12px;
-  color: var(--dim);
 }
 
-/* Run button */
-.run-btn {
-  width: 100%;
-  margin-top: 16px;
-  padding: 14px;
-  background: linear-gradient(135deg, #e8ff47, #b8ff00);
-  color: #0a0a0f;
-  border: none;
-  border-radius: 10px;
-  font-family: 'Bebas Neue', sans-serif;
-  font-size: 20px;
-  letter-spacing: 3px;
-  cursor: pointer;
-  transition: opacity 0.2s, transform 0.1s;
+.nav-links {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  flex-wrap: wrap;
 }
 
-.run-btn:hover { opacity: 0.92; }
-.run-btn:active { transform: scale(0.99); }
+.nav-link {
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  padding: 9px 12px;
+  font-size: 13px;
+  transition: 160ms ease;
+}
 
-/* ── RIGHT PANEL ── */
-.right { display: flex; flex-direction: column; gap: 20px; }
+.nav-link:hover,
+.nav-link.active {
+  color: var(--ink);
+  border-color: var(--line);
+  background: rgba(255, 255, 255, 0.06);
+}
 
-.result-panel {
-  background: var(--card);
-  border: 1px solid var(--border2);
-  border-radius: 16px;
+.page {
+  display: none;
+  padding: 48px 0 80px;
+}
+
+.page.active { display: block; }
+
+.hero {
+  min-height: calc(100vh - 72px);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 420px;
+  gap: 34px;
+  align-items: center;
+  padding: 34px 0 58px;
+}
+
+.eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--soft);
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 7px 11px;
+  font-size: 12px;
+  margin-bottom: 18px;
+}
+
+.pulse {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--mint);
+  box-shadow: 0 0 18px var(--mint);
+}
+
+h1, h2, h3, p { margin-top: 0; }
+
+h1 {
+  max-width: 820px;
+  margin-bottom: 18px;
+  font-size: clamp(45px, 8vw, 88px);
+  line-height: 0.95;
+  font-weight: 900;
+}
+
+.accent-text {
+  color: transparent;
+  background: linear-gradient(90deg, var(--cyan), var(--mint), var(--sun));
+  background-clip: text;
+  -webkit-background-clip: text;
+}
+
+.lead {
+  max-width: 710px;
+  color: var(--soft);
+  font-size: clamp(17px, 2vw, 20px);
+  line-height: 1.65;
+  margin-bottom: 28px;
+}
+
+.actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 36px;
+}
+
+.btn {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  border-radius: var(--radius);
+  padding: 11px 15px;
+  color: var(--ink);
+  border: 1px solid var(--line-strong);
+  background: rgba(255, 255, 255, 0.07);
+  transition: 160ms ease;
+}
+
+.btn.primary {
+  color: #061015;
+  border: 0;
+  background: linear-gradient(135deg, var(--cyan), var(--mint));
+  font-weight: 800;
+}
+
+.btn.warn {
+  color: #170d0d;
+  border: 0;
+  background: linear-gradient(135deg, var(--sun), var(--coral));
+  font-weight: 800;
+}
+
+.btn:hover { transform: translateY(-1px); filter: brightness(1.05); }
+
+.kpis {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.kpi, .panel, .metric, .feature, .step {
+  border: 1px solid var(--line);
+  background: rgba(17, 21, 34, 0.86);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.kpi { padding: 16px; }
+
+.kpi span, .mini-label {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  margin-bottom: 8px;
+}
+
+.kpi strong {
+  color: var(--ink);
+  font-size: 26px;
+}
+
+.visual-board {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: rgba(17, 21, 34, 0.8);
+  padding: 18px;
+  box-shadow: var(--shadow);
+}
+
+.cpu-card {
+  min-height: 460px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.cpu-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.processor {
+  height: 180px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  position: relative;
+  display: grid;
+  place-items: center;
   overflow: hidden;
+  background:
+    linear-gradient(rgba(255,255,255,0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.04) 1px, transparent 1px),
+    rgba(255, 255, 255, 0.035);
+  background-size: 28px 28px;
 }
 
-/* Quantum bar */
-.q-bar {
+.processor::before {
+  content: "";
+  position: absolute;
+  width: 58%;
+  height: 58%;
+  border-radius: 50%;
+  border: 18px solid rgba(84, 225, 255, 0.2);
+  border-top-color: var(--mint);
+  animation: spin 5s linear infinite;
+}
+
+.processor strong {
+  z-index: 1;
+  font-size: 45px;
+  letter-spacing: 0;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.queue-demo {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
+}
+
+.queue-demo div {
+  min-height: 70px;
+  border-radius: var(--radius);
+  display: grid;
+  place-items: center;
+  color: #061015;
+  font-weight: 900;
+}
+
+.micro-gantt {
   display: flex;
-  gap: 0;
-  border-bottom: 1px solid var(--border);
+  min-height: 42px;
+  gap: 4px;
 }
 
-.q-stat {
-  flex: 1;
-  padding: 16px 20px;
-  border-right: 1px solid var(--border);
-}
-
-.q-stat:last-child { border-right: none; }
-
-.q-label {
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 10px;
-  letter-spacing: 1.5px;
-  text-transform: uppercase;
-  color: var(--muted);
-  margin-bottom: 4px;
-}
-
-.q-value {
-  font-family: 'Bebas Neue', sans-serif;
-  font-size: 2rem;
-  letter-spacing: 1px;
-  color: var(--accent);
-}
-
-.q-value.teal { color: var(--accent2); }
-.q-value.pink { color: var(--accent3); }
-.q-value.white { color: var(--text); }
-
-/* Gantt */
-.gantt-area { padding: 20px; }
-
-.section-lbl {
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 10px;
-  letter-spacing: 2px;
-  text-transform: uppercase;
-  color: var(--muted);
-  margin-bottom: 12px;
-}
-
-.gantt-scroll { overflow-x: auto; padding-bottom: 4px; }
-
-.gantt-track {
-  display: flex;
-  gap: 3px;
-  min-height: 52px;
-  align-items: stretch;
-}
-
-.g-blk {
+.micro-gantt span {
   border-radius: 6px;
+  min-width: 28px;
+  flex: 1;
+}
+
+.section-head {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 24px;
+}
+
+.section-head h2 {
+  font-size: clamp(30px, 4vw, 48px);
+  line-height: 1;
+  margin-bottom: 8px;
+}
+
+.section-head p {
+  color: var(--muted);
+  max-width: 680px;
+  line-height: 1.6;
+  margin-bottom: 0;
+}
+
+.sim-grid {
+  display: grid;
+  grid-template-columns: 360px minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.panel { overflow: hidden; }
+
+.panel-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 15px 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.panel-title strong { font-size: 14px; }
+.panel-title span { color: var(--muted); font-size: 12px; }
+
+.panel-body { padding: 16px; }
+
+.field { margin-bottom: 13px; }
+
+.field label {
+  display: flex;
+  justify-content: space-between;
+  color: var(--muted);
+  font-size: 12px;
+  margin-bottom: 7px;
+}
+
+.field input, .field select {
+  width: 100%;
+  min-height: 42px;
+  color: var(--ink);
+  outline: none;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.055);
+  padding: 9px 11px;
+}
+
+.field input:focus, .field select:focus {
+  border-color: var(--cyan);
+  box-shadow: 0 0 0 3px rgba(84, 225, 255, 0.12);
+}
+
+.two {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.process-list {
+  min-height: 166px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.process-row {
+  display: grid;
+  grid-template-columns: 38px 1fr auto auto;
+  gap: 9px;
+  align-items: center;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.045);
+  border-radius: var(--radius);
+  padding: 8px;
+}
+
+.chip {
+  width: 34px;
+  height: 34px;
+  border-radius: 7px;
+  display: grid;
+  place-items: center;
+  color: #071018;
+  font-weight: 900;
+  font-size: 12px;
+}
+
+.row-meta strong {
+  display: block;
+  font-size: 13px;
+}
+
+.row-meta span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.icon-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: 7px;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  background: rgba(255,255,255,0.06);
+  border: 1px solid var(--line);
+}
+
+.icon-btn:hover { color: var(--coral); }
+
+.empty {
+  min-height: 120px;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  color: var(--muted);
+  border: 1px dashed var(--line);
+  border-radius: var(--radius);
+  padding: 18px;
+  font-size: 13px;
+}
+
+.metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.metric {
+  box-shadow: none;
+  padding: 14px;
+}
+
+.metric strong {
+  display: block;
+  font-size: 28px;
+}
+
+.metric.cyan strong { color: var(--cyan); }
+.metric.mint strong { color: var(--mint); }
+.metric.sun strong { color: var(--sun); }
+.metric.coral strong { color: var(--coral); }
+
+.gantt-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.035);
+  padding: 14px;
+}
+
+.gantt {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+  min-height: 66px;
+}
+
+.gantt-block {
+  min-width: 38px;
+  border-radius: 7px;
+  color: #071018;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 11px;
-  font-weight: 600;
-  color: #000;
-  min-width: 20px;
-  flex-shrink: 0;
   position: relative;
-  cursor: default;
-  animation: popUp 0.25s ease both;
+  font-weight: 900;
+  font-size: 12px;
 }
 
-@keyframes popUp {
-  from { transform: scaleY(0.3); opacity: 0; }
-  to { transform: scaleY(1); opacity: 1; }
+.gantt-block.idle {
+  color: var(--muted);
+  background: repeating-linear-gradient(45deg, rgba(255,255,255,0.09), rgba(255,255,255,0.09) 5px, transparent 5px, transparent 10px);
 }
 
-.g-blk:hover .tooltip {
+.gantt-block:hover .tip {
   opacity: 1;
-  transform: translateY(0);
-  pointer-events: auto;
+  transform: translate(-50%, -4px);
 }
 
-.tooltip {
+.tip {
   position: absolute;
-  bottom: calc(100% + 6px);
   left: 50%;
-  transform: translateX(-50%) translateY(4px);
-  background: var(--surface);
-  border: 1px solid var(--border2);
-  border-radius: 6px;
-  padding: 5px 10px;
-  font-size: 10px;
-  white-space: nowrap;
-  color: var(--text);
+  bottom: calc(100% + 8px);
+  transform: translate(-50%, 4px);
   opacity: 0;
-  transition: all 0.15s;
   pointer-events: none;
+  white-space: nowrap;
+  color: var(--ink);
+  background: #0c101b;
+  border: 1px solid var(--line-strong);
+  border-radius: 7px;
+  padding: 6px 9px;
+  font-size: 12px;
+  font-weight: 600;
+  transition: 120ms ease;
   z-index: 10;
 }
 
-.gantt-times {
+.time-axis {
   display: flex;
-  gap: 3px;
-  margin-top: 6px;
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 10px;
-  color: var(--dim);
-  padding-left: 1px;
-}
-
-/* Exec log */
-.log-area { padding: 0 20px 20px; }
-
-.log-scroll {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 12px 14px;
-  max-height: 160px;
-  overflow-y: auto;
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 11px;
-  line-height: 1.9;
+  gap: 4px;
+  min-height: 25px;
+  margin-top: 8px;
   color: var(--muted);
+  font-size: 12px;
 }
 
-.log-scroll::-webkit-scrollbar { width: 3px; }
-.log-scroll::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+.time-axis span { flex-shrink: 0; }
 
-.log-run { color: var(--accent2); }
-.log-done { color: var(--accent); }
-.log-q { color: var(--accent3); }
+.table-wrap {
+  overflow-x: auto;
+  margin-top: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
 
-/* Results table */
-.tbl-area { padding: 0 20px 20px; }
-
-.res-tbl {
+table {
   width: 100%;
   border-collapse: collapse;
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 12px;
+  min-width: 680px;
 }
 
-.res-tbl th {
-  padding: 8px 10px;
+th, td {
+  padding: 11px 12px;
   text-align: left;
-  font-size: 10px;
-  letter-spacing: 1.5px;
-  text-transform: uppercase;
+  border-bottom: 1px solid var(--line);
+  font-size: 13px;
+}
+
+th {
   color: var(--muted);
-  border-bottom: 1px solid var(--border);
-  font-weight: 400;
+  background: rgba(255,255,255,0.045);
+  font-weight: 700;
 }
 
-.res-tbl td {
-  padding: 9px 10px;
-  border-bottom: 1px solid var(--border);
-  color: var(--text);
-}
+tr:last-child td { border-bottom: 0; }
 
-.res-tbl tr:last-child td { border-bottom: none; }
-.res-tbl tr:hover td { background: rgba(255,255,255,0.02); }
-
-.avg-row td {
-  color: var(--muted) !important;
-  border-top: 1px solid var(--border2) !important;
-  font-size: 11px;
-}
-
-.avg-row td.val { color: var(--accent) !important; font-weight: 500; }
-
-/* Placeholder */
-.placeholder {
-  padding: 60px 20px;
-  text-align: center;
-}
-
-.placeholder-icon {
-  font-size: 40px;
-  margin-bottom: 14px;
-  opacity: 0.3;
-}
-
-.placeholder p {
-  font-family: 'IBM Plex Mono', monospace;
+.log {
+  max-height: 208px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 12px;
+  color: var(--muted);
+  background: rgba(0, 0, 0, 0.18);
+  font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
   font-size: 12px;
-  color: var(--dim);
+  line-height: 1.75;
+}
+
+.log b { color: var(--cyan); }
+.log em { color: var(--sun); font-style: normal; }
+.log strong { color: var(--mint); }
+
+.compare-layout {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.chart {
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+  margin-top: 12px;
+}
+
+.bar-row {
+  display: grid;
+  grid-template-columns: 128px 1fr 64px;
+  align-items: center;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.bar-track {
+  height: 12px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.08);
+  overflow: hidden;
+}
+
+.bar-fill {
+  height: 100%;
+  min-width: 3px;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--cyan), var(--mint));
+}
+
+.bar-fill.fixed {
+  background: linear-gradient(90deg, var(--sun), var(--coral));
+}
+
+.features-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.feature {
+  box-shadow: none;
+  padding: 18px;
+}
+
+.feature h3 {
+  margin-bottom: 9px;
+  font-size: 18px;
+}
+
+.feature p, .step p {
+  color: var(--muted);
+  line-height: 1.62;
+  margin-bottom: 0;
+}
+
+.steps {
+  display: grid;
+  gap: 12px;
+  counter-reset: item;
+}
+
+.step {
+  box-shadow: none;
+  padding: 18px 18px 18px 68px;
+  position: relative;
+}
+
+.step::before {
+  counter-increment: item;
+  content: counter(item);
+  position: absolute;
+  left: 18px;
+  top: 18px;
+  width: 34px;
+  height: 34px;
+  border-radius: 7px;
+  display: grid;
+  place-items: center;
+  color: #061015;
+  font-weight: 900;
+  background: var(--sun);
+}
+
+.formula {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 16px;
+  background: rgba(255,255,255,0.045);
+  color: var(--soft);
+  font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
   line-height: 1.7;
 }
 
-@media (max-width: 800px) {
-  main { grid-template-columns: 1fr; padding: 0 20px 60px; }
-  header { padding: 32px 20px 0; }
-  .q-bar { flex-wrap: wrap; }
-  .q-stat { min-width: 50%; }
+.notice {
+  margin-top: 14px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+@media (max-width: 980px) {
+  .hero, .sim-grid, .compare-layout { grid-template-columns: 1fr; }
+  .metrics-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .features-grid { grid-template-columns: 1fr; }
+  .hero { min-height: auto; padding-top: 42px; }
+}
+
+@media (max-width: 700px) {
+  .nav { align-items: flex-start; flex-direction: column; padding: 14px 0; }
+  .brand { min-width: 0; }
+  .nav-links { justify-content: flex-start; }
+  .kpis, .metrics-grid { grid-template-columns: 1fr; }
+  .section-head { display: block; }
+  .two { grid-template-columns: 1fr; }
+  .page { padding-top: 28px; }
 }
 </style>
 </head>
 <body>
-
-<header>
-  <h1>Adaptive <span>RR</span> Scheduler</h1>
-  <p class="tagline">Q = ⌈ Σ remaining / n ⌉ &nbsp;·&nbsp; quantum recomputed <em>every round</em></p>
+<header class="topbar">
+  <nav class="shell nav" aria-label="Primary navigation">
+    <div class="brand">
+      <div class="brand-mark">RR</div>
+      <div>
+        <strong>Adaptive Quantum Scheduler</strong>
+        <span>Operating Systems Project</span>
+      </div>
+    </div>
+    <div class="nav-links">
+      <button class="nav-link active" data-page="home">Home</button>
+      <button class="nav-link" data-page="simulator">Simulator</button>
+      <button class="nav-link" data-page="compare">Compare</button>
+      <button class="nav-link" data-page="algorithm">Algorithm</button>
+    </div>
+  </nav>
 </header>
 
 <main>
-  <!-- LEFT -->
-  <div>
-    <div class="panel">
-      <div class="panel-header">
-        <div class="dot"></div>
-        <span class="panel-label">Process Input</span>
+  <section class="page active" id="home">
+    <div class="shell hero">
+      <div>
+        <div class="eyebrow"><span class="pulse"></span> Dynamic time quantum, live metrics, polished visualization</div>
+        <h1>Adaptive Time-Quantum <span class="accent-text">Round Robin Scheduler</span></h1>
+        <p class="lead">A CPU scheduling simulation that recalculates the time slice from the current workload, then compares its waiting time, turnaround time, response time, and context switches against fixed-quantum Round Robin.</p>
+        <div class="actions">
+          <button class="btn primary" data-page-jump="simulator">Run Simulator</button>
+          <button class="btn" data-page-jump="compare">View Comparison</button>
+          <button class="btn" data-page-jump="algorithm">Read Algorithm</button>
+        </div>
+        <div class="kpis">
+          <div class="kpi"><span>Quantum Formula</span><strong>Adaptive</strong></div>
+          <div class="kpi"><span>Visualization</span><strong>Gantt</strong></div>
+          <div class="kpi"><span>Metrics</span><strong>WT/TAT</strong></div>
+        </div>
       </div>
-      <div class="panel-body">
-        <div class="field">
-          <label>Process Name</label>
-          <input type="text" id="pName" placeholder="P1" value="P1">
+      <div class="visual-board cpu-card" aria-label="Scheduler visual preview">
+        <div class="cpu-top">
+          <span>READY QUEUE</span>
+          <span>QUANTUM CHANGES EACH ROUND</span>
         </div>
-        <div class="field">
-          <label>Burst Time (ms)</label>
-          <input type="number" id="pBurst" placeholder="10" min="1">
+        <div class="queue-demo">
+          <div style="background:var(--cyan)">P1</div>
+          <div style="background:var(--mint)">P2</div>
+          <div style="background:var(--sun)">P3</div>
+          <div style="background:var(--coral)">P4</div>
+          <div style="background:var(--violet)">P5</div>
         </div>
-        <div class="field">
-          <label>Arrival Time</label>
-          <input type="number" id="pArr" placeholder="0" min="0" value="0">
-        </div>
-        <button class="add-btn" onclick="addProc()">+ ADD PROCESS</button>
-        <button class="demo-btn" onclick="loadDemo()">Load demo data (5 processes)</button>
-
-        <div class="queue-section">
-          <div class="queue-title">
-            <span>Ready Queue</span>
-            <button class="clear-link" onclick="clearAll()">CLEAR ALL</button>
+        <div class="processor"><strong>CPU</strong></div>
+        <div>
+          <div class="mini-label">Execution Timeline</div>
+          <div class="micro-gantt">
+            <span style="background:var(--cyan);flex:2"></span>
+            <span style="background:var(--mint)"></span>
+            <span style="background:var(--sun);flex:1.4"></span>
+            <span style="background:var(--coral)"></span>
+            <span style="background:var(--violet);flex:1.8"></span>
           </div>
-          <div class="proc-list" id="procList">
-            <div class="empty-queue">No processes added yet.</div>
-          </div>
-        </div>
-
-        <button class="run-btn" onclick="runSim()">RUN SIMULATION</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- RIGHT -->
-  <div class="right">
-    <div class="result-panel" id="resultPanel">
-      <div class="placeholder" id="placeholder">
-        <div class="placeholder-icon">⚙</div>
-        <p>Add processes and click<br><strong>Run Simulation</strong> to see<br>the Gantt chart and metrics.</p>
-      </div>
-
-      <div id="resultContent" style="display:none;">
-        <!-- Stats bar -->
-        <div class="q-bar">
-          <div class="q-stat">
-            <div class="q-label">Avg Waiting Time</div>
-            <div class="q-value" id="sWT">—</div>
-          </div>
-          <div class="q-stat">
-            <div class="q-label">Avg Turnaround</div>
-            <div class="q-value teal" id="sTAT">—</div>
-          </div>
-          <div class="q-stat">
-            <div class="q-label">Context Switches</div>
-            <div class="q-value pink" id="sCS">—</div>
-          </div>
-          <div class="q-stat">
-            <div class="q-label">Total Time</div>
-            <div class="q-value white" id="sTT">—</div>
-          </div>
-        </div>
-
-        <!-- Gantt -->
-        <div class="gantt-area">
-          <div class="section-lbl">Gantt Chart</div>
-          <div class="gantt-scroll">
-            <div class="gantt-track" id="ganttTrack"></div>
-            <div class="gantt-times" id="ganttTimes"></div>
-          </div>
-        </div>
-
-        <!-- Log -->
-        <div class="log-area">
-          <div class="section-lbl">Execution Log</div>
-          <div class="log-scroll" id="logScroll"></div>
-        </div>
-
-        <!-- Table -->
-        <div class="tbl-area">
-          <div class="section-lbl">Process Results</div>
-          <table class="res-tbl">
-            <thead>
-              <tr>
-                <th>Process</th>
-                <th>Burst</th>
-                <th>Arrival</th>
-                <th>Finish</th>
-                <th>Turnaround</th>
-                <th>Waiting</th>
-              </tr>
-            </thead>
-            <tbody id="resTbl"></tbody>
-          </table>
         </div>
       </div>
     </div>
-  </div>
+  </section>
+
+  <section class="page" id="simulator">
+    <div class="shell">
+      <div class="section-head">
+        <div>
+          <h2>Live Scheduler</h2>
+          <p>Add processes, choose a quantum strategy, and run the CPU scheduler. The chart displays the real execution order and every adaptive quantum decision.</p>
+        </div>
+        <button class="btn primary" id="runTopBtn">Run Simulation</button>
+      </div>
+
+      <div class="sim-grid">
+        <aside class="panel">
+          <div class="panel-title">
+            <strong>Process Input</strong>
+            <span id="processCount">0 processes</span>
+          </div>
+          <div class="panel-body">
+            <div class="field">
+              <label for="pName">Process ID <span>example: P1</span></label>
+              <input id="pName" type="text" value="P1" maxlength="8">
+            </div>
+            <div class="two">
+              <div class="field">
+                <label for="pArrival">Arrival</label>
+                <input id="pArrival" type="number" value="0" min="0">
+              </div>
+              <div class="field">
+                <label for="pBurst">Burst</label>
+                <input id="pBurst" type="number" placeholder="8" min="1">
+              </div>
+            </div>
+            <div class="field">
+              <label for="strategy">Adaptive Formula</label>
+              <select id="strategy">
+                <option value="average">Average remaining burst</option>
+                <option value="median">Median remaining burst</option>
+                <option value="load">Load-aware hybrid</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="fixedQ">Fixed RR Quantum <span>for comparison</span></label>
+              <input id="fixedQ" type="number" value="4" min="1">
+            </div>
+            <div class="two">
+              <button class="btn primary" id="addBtn">Add</button>
+              <button class="btn" id="demoBtn">Demo Data</button>
+            </div>
+            <button class="btn warn" id="clearBtn" style="width:100%;margin-top:10px;">Reset All</button>
+          </div>
+        </aside>
+
+        <section class="panel">
+          <div class="panel-title">
+            <strong>Ready Queue</strong>
+            <span>arrival time + burst time</span>
+          </div>
+          <div class="panel-body">
+            <div class="process-list" id="processList"></div>
+          </div>
+        </section>
+      </div>
+
+      <section class="panel" style="margin-top:18px;">
+        <div class="panel-title">
+          <strong>Adaptive RR Results</strong>
+          <span id="resultCaption">Run the simulation to generate metrics</span>
+        </div>
+        <div class="panel-body">
+          <div class="metrics-grid">
+            <div class="metric cyan"><span class="mini-label">Avg Waiting Time</span><strong id="avgWT">--</strong></div>
+            <div class="metric mint"><span class="mini-label">Avg Turnaround Time</span><strong id="avgTAT">--</strong></div>
+            <div class="metric sun"><span class="mini-label">CPU Utilization</span><strong id="cpuUse">--</strong></div>
+            <div class="metric coral"><span class="mini-label">Context Switches</span><strong id="switches">--</strong></div>
+          </div>
+
+          <div class="mini-label">Gantt Chart</div>
+          <div class="gantt-wrap">
+            <div class="gantt" id="gantt"></div>
+            <div class="time-axis" id="timeAxis"></div>
+          </div>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Process</th>
+                  <th>Arrival</th>
+                  <th>Burst</th>
+                  <th>Completion</th>
+                  <th>Turnaround</th>
+                  <th>Waiting</th>
+                  <th>Response</th>
+                </tr>
+              </thead>
+              <tbody id="resultRows">
+                <tr><td colspan="7">No simulation has been run yet.</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="two" style="margin-top:14px;">
+            <div>
+              <div class="mini-label">Quantum Log</div>
+              <div class="log" id="eventLog">Waiting for a run...</div>
+            </div>
+            <div>
+              <div class="mini-label">Quantum Timeline</div>
+              <div class="log" id="quantumLog">The adaptive quantum will appear here after every scheduling cycle.</div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </section>
+
+  <section class="page" id="compare">
+    <div class="shell">
+      <div class="section-head">
+        <div>
+          <h2>Adaptive vs Fixed RR</h2>
+          <p>The same process set is executed twice: once with a recalculated quantum and once with a constant quantum. Lower waiting and turnaround times are better.</p>
+        </div>
+        <button class="btn primary" id="compareBtn">Refresh Comparison</button>
+      </div>
+
+      <div class="compare-layout">
+        <section class="panel">
+          <div class="panel-title">
+            <strong>Adaptive Round Robin</strong>
+            <span id="adaptiveFormulaName">Average remaining burst</span>
+          </div>
+          <div class="panel-body">
+            <div class="metrics-grid">
+              <div class="metric cyan"><span class="mini-label">Avg WT</span><strong id="cmpAWT">--</strong></div>
+              <div class="metric mint"><span class="mini-label">Avg TAT</span><strong id="cmpATAT">--</strong></div>
+            </div>
+            <div class="chart" id="adaptiveBars"></div>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-title">
+            <strong>Fixed Round Robin</strong>
+            <span id="fixedLabel">Quantum = 4</span>
+          </div>
+          <div class="panel-body">
+            <div class="metrics-grid">
+              <div class="metric sun"><span class="mini-label">Avg WT</span><strong id="cmpFWT">--</strong></div>
+              <div class="metric coral"><span class="mini-label">Avg TAT</span><strong id="cmpFTAT">--</strong></div>
+            </div>
+            <div class="chart" id="fixedBars"></div>
+          </div>
+        </section>
+      </div>
+
+      <section class="panel" style="margin-top:16px;">
+        <div class="panel-title">
+          <strong>Performance Verdict</strong>
+          <span>based on current workload</span>
+        </div>
+        <div class="panel-body">
+          <div class="formula" id="verdict">Run a comparison to see which scheduler performs better for the current inputs.</div>
+          <p class="notice">Adaptive RR is not guaranteed to beat fixed RR for every workload. It usually helps when the queue has mixed burst lengths or when a fixed quantum is poorly chosen.</p>
+        </div>
+      </section>
+    </div>
+  </section>
+
+  <section class="page" id="algorithm">
+    <div class="shell">
+      <div class="section-head">
+        <div>
+          <h2>Algorithm Design</h2>
+          <p>The scheduling engine maintains a ready queue, executes each process for the current quantum, admits newly arrived processes, and recomputes quantum from remaining burst times.</p>
+        </div>
+      </div>
+
+      <div class="features-grid">
+        <div class="feature">
+          <h3>Scheduling Engine</h3>
+          <p>Maintains pending, ready, running, and completed process states. It records every execution segment for the Gantt chart.</p>
+        </div>
+        <div class="feature">
+          <h3>Data & Metrics</h3>
+          <p>Validates arrivals and bursts, tracks completion time, and calculates waiting, turnaround, response time, context switches, and CPU utilization.</p>
+        </div>
+        <div class="feature">
+          <h3>Visualization</h3>
+          <p>Transforms timeline segments into an interactive Gantt chart, quantum log, result table, and comparison bars.</p>
+        </div>
+      </div>
+
+      <section class="panel" style="margin-top:16px;">
+        <div class="panel-title">
+          <strong>Quantum Strategies</strong>
+          <span>selectable in simulator</span>
+        </div>
+        <div class="panel-body">
+          <div class="formula">
+Average: Q = ceil(sum(remaining burst times) / number of ready processes)<br>
+Median: Q = ceil(median(remaining burst times in ready queue))<br>
+Load-aware: Q = ceil((average + median) / 2), then reduce slightly when queue length is high
+          </div>
+        </div>
+      </section>
+
+      <section class="steps" style="margin-top:16px;">
+        <div class="step"><h3>Sort and Admit</h3><p>Processes are sorted by arrival time. At each CPU time, all processes whose arrival time has passed are moved into the ready queue.</p></div>
+        <div class="step"><h3>Calculate Quantum</h3><p>The scheduler computes a fresh time slice from the ready queue before selecting the next process.</p></div>
+        <div class="step"><h3>Execute or Preempt</h3><p>The selected process runs for min(quantum, remaining burst). Finished processes leave the queue; unfinished ones return to the end.</p></div>
+        <div class="step"><h3>Compute Metrics</h3><p>Completion time gives turnaround time. Waiting time is turnaround minus burst. Response time is first start minus arrival.</p></div>
+      </section>
+    </div>
+  </section>
 </main>
 
 <script>
-const COLORS = ['#e8ff47','#47ffe8','#ff4778','#ff9f47','#b847ff','#47b8ff','#ff47c8','#47ff8e','#ffb347','#47d4ff'];
-const DARK   = ['#000','#000','#fff','#000','#fff','#000','#fff','#000','#000','#000'];
+const colors = ["#54e1ff", "#58f0a7", "#ffd166", "#ff6b6b", "#a78bfa", "#6aa7ff", "#f472b6", "#7dd3fc"];
+let processes = [];
+let nextPid = 1;
+let lastAdaptive = null;
+let lastFixed = null;
 
-let procs = [], pid = 1;
+const $ = (id) => document.getElementById(id);
 
-function addProc() {
-  const name  = document.getElementById('pName').value.trim() || ('P' + pid);
-  const burst = parseInt(document.getElementById('pBurst').value);
-  const arr   = parseInt(document.getElementById('pArr').value) || 0;
-  if (!burst || burst < 1) { alert('Enter a valid burst time.'); return; }
-  const ci = (pid - 1) % COLORS.length;
-  procs.push({ id: pid, name, burst, arr, color: COLORS[ci], dark: DARK[ci] });
-  pid++;
-  document.getElementById('pName').value  = 'P' + pid;
-  document.getElementById('pBurst').value = '';
-  document.getElementById('pArr').value   = '0';
-  document.getElementById('pBurst').focus();
-  renderList();
+function showPage(id) {
+  document.querySelectorAll(".page").forEach(page => page.classList.toggle("active", page.id === id));
+  document.querySelectorAll(".nav-link").forEach(btn => btn.classList.toggle("active", btn.dataset.page === id));
+  window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
-function delProc(id) { procs = procs.filter(p => p.id !== id); renderList(); }
+function fmt(n) {
+  if (n === null || n === undefined || Number.isNaN(n)) return "--";
+  return Number.isInteger(n) ? String(n) : n.toFixed(2);
+}
 
-function renderList() {
-  const el = document.getElementById('procList');
-  if (!procs.length) { el.innerHTML = '<div class="empty-queue">No processes added yet.</div>'; return; }
-  el.innerHTML = procs.map(p => `
-    <div class="proc-item">
-      <div class="proc-chip" style="background:${p.color}22; color:${p.color}; border:1px solid ${p.color}44;">${p.name.substring(0,2)}</div>
-      <span class="proc-name" style="color:${p.color};">${p.name}</span>
-      <span class="proc-burst">BT:${p.burst} AT:${p.arr}</span>
-      <button class="del" onclick="delProc(${p.id})">✕</button>
-    </div>`).join('');
+function strategyLabel(strategy) {
+  return {
+    average: "Average remaining burst",
+    median: "Median remaining burst",
+    load: "Load-aware hybrid"
+  }[strategy] || "Average remaining burst";
+}
+
+function addProcess() {
+  const name = $("pName").value.trim() || `P${nextPid}`;
+  const arrival = Number.parseInt($("pArrival").value, 10);
+  const burst = Number.parseInt($("pBurst").value, 10);
+
+  if (!Number.isFinite(arrival) || arrival < 0) {
+    alert("Arrival time must be 0 or greater.");
+    return;
+  }
+  if (!Number.isFinite(burst) || burst < 1) {
+    alert("Burst time must be at least 1.");
+    return;
+  }
+
+  processes.push({
+    id: nextPid,
+    name,
+    arrival,
+    burst,
+    color: colors[(nextPid - 1) % colors.length]
+  });
+  nextPid++;
+  $("pName").value = `P${nextPid}`;
+  $("pBurst").value = "";
+  $("pArrival").value = "0";
+  renderProcesses();
+}
+
+function removeProcess(id) {
+  processes = processes.filter(p => p.id !== id);
+  renderProcesses();
 }
 
 function loadDemo() {
-  procs = []; pid = 1;
-  [['P1',10,0],['P2',5,0],['P3',8,0],['P4',3,0],['P5',6,0]].forEach(([n,b,a]) => {
-    const ci = (pid-1) % COLORS.length;
-    procs.push({ id: pid, name: n, burst: b, arr: a, color: COLORS[ci], dark: DARK[ci] });
-    pid++;
+  processes = [];
+  nextPid = 1;
+  [
+    ["P1", 0, 10],
+    ["P2", 1, 5],
+    ["P3", 2, 8],
+    ["P4", 3, 3],
+    ["P5", 5, 12],
+    ["P6", 6, 4]
+  ].forEach(([name, arrival, burst]) => {
+    processes.push({ id: nextPid, name, arrival, burst, color: colors[(nextPid - 1) % colors.length] });
+    nextPid++;
   });
-  document.getElementById('pName').value = 'P' + pid;
-  renderList();
+  $("pName").value = `P${nextPid}`;
+  renderProcesses();
+  runSimulation();
 }
 
 function clearAll() {
-  procs = []; pid = 1;
-  document.getElementById('pName').value  = 'P1';
-  document.getElementById('pBurst').value = '';
-  document.getElementById('pArr').value   = '0';
-  renderList();
-  document.getElementById('placeholder').style.display = 'block';
-  document.getElementById('resultContent').style.display = 'none';
+  processes = [];
+  nextPid = 1;
+  lastAdaptive = null;
+  lastFixed = null;
+  $("pName").value = "P1";
+  $("pArrival").value = "0";
+  $("pBurst").value = "";
+  renderProcesses();
+  renderEmptyResults();
+  renderComparison();
 }
 
-function calcQ(q) { return Math.max(1, Math.ceil(q.reduce((s,p)=>s+p.rem,0) / q.length)); }
+function renderProcesses() {
+  $("processCount").textContent = `${processes.length} process${processes.length === 1 ? "" : "es"}`;
+  if (!processes.length) {
+    $("processList").innerHTML = `<div class="empty">No processes yet. Add a process or load the demo workload.</div>`;
+    return;
+  }
+  $("processList").innerHTML = processes
+    .slice()
+    .sort((a, b) => a.arrival - b.arrival || a.id - b.id)
+    .map(p => `
+      <div class="process-row">
+        <div class="chip" style="background:${p.color}">${p.name.slice(0, 2)}</div>
+        <div class="row-meta"><strong>${p.name}</strong><span>AT ${p.arrival} | BT ${p.burst}</span></div>
+        <span style="color:${p.color};font-weight:800;">${p.burst}u</span>
+        <button class="icon-btn" title="Delete ${p.name}" onclick="removeProcess(${p.id})">x</button>
+      </div>
+    `).join("");
+}
 
-function runSim() {
-  if (!procs.length) { alert('Add at least one process!'); return; }
+function median(values) {
+  const sorted = values.slice().sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+}
 
-  const sim = procs.map(p => ({ ...p, rem: p.burst, ct: 0 }));
-  sim.sort((a,b) => a.arr - b.arr);
+function calculateQuantum(queue, strategy) {
+  const remaining = queue.map(p => p.remaining);
+  const avg = remaining.reduce((sum, value) => sum + value, 0) / remaining.length;
+  const med = median(remaining);
+  let q = avg;
 
-  let time = 0, cs = 0, gantt = [], log = [];
-  let queue = [], pending = [...sim];
+  if (strategy === "median") q = med;
+  if (strategy === "load") {
+    q = (avg + med) / 2;
+    if (queue.length >= 5) q *= 0.82;
+    if (queue.length <= 2) q *= 1.18;
+  }
+  return Math.max(1, Math.ceil(q));
+}
 
-  const admit = t => { pending = pending.filter(p => { if (p.arr <= t) { queue.push(p); return false; } return true; }); };
-  admit(0);
+function simulate(mode, options = {}) {
+  const strategy = options.strategy || "average";
+  const fixedQ = Math.max(1, Number.parseInt(options.fixedQ, 10) || 4);
+  const jobs = processes.map(p => ({
+    ...p,
+    remaining: p.burst,
+    completion: 0,
+    firstStart: null
+  })).sort((a, b) => a.arrival - b.arrival || a.id - b.id);
 
-  let safety = 0;
-  while ((queue.length || pending.length) && ++safety < 50000) {
-    if (!queue.length) { time = pending[0].arr; admit(time); continue; }
-    const Q = calcQ(queue);
+  let pending = jobs.slice();
+  let queue = [];
+  let time = 0;
+  let busy = 0;
+  let switches = 0;
+  let timeline = [];
+  let events = [];
+  let quantumEvents = [];
+
+  const admit = () => {
+    const admitted = [];
+    pending = pending.filter(p => {
+      if (p.arrival <= time) {
+        queue.push(p);
+        admitted.push(p.name);
+        return false;
+      }
+      return true;
+    });
+    if (admitted.length) events.push(`<strong>t=${time}</strong> admitted ${admitted.join(", ")}`);
+  };
+
+  admit();
+  let guard = 0;
+  while ((queue.length || pending.length) && guard++ < 100000) {
+    if (!queue.length) {
+      const nextArrival = pending[0].arrival;
+      if (nextArrival > time) {
+        timeline.push({ name: "Idle", start: time, end: nextArrival, color: "idle", quantum: 0 });
+        events.push(`<em>t=${time}-${nextArrival}</em> CPU idle`);
+      }
+      time = nextArrival;
+      admit();
+      continue;
+    }
+
+    const quantum = mode === "adaptive" ? calculateQuantum(queue, strategy) : fixedQ;
     const p = queue.shift();
-    cs++;
-    const exec = Math.min(Q, p.rem);
-    const s = time; time += exec; p.rem -= exec;
-    gantt.push({ name: p.name, color: p.color, dark: p.dark, start: s, end: time, q: Q });
-    admit(time);
-    log.push({ type: 'run', text: `t${s}→${time}: ${p.name} ran ${exec}u  (Q=${Q})  rem=${p.rem}` });
-    if (p.rem === 0) { p.ct = time; log.push({ type: 'done', text: `  ✓ ${p.name} finished` }); }
-    else { queue.push(p); }
+    const start = time;
+    const run = Math.min(quantum, p.remaining);
+    if (p.firstStart === null) p.firstStart = start;
+    time += run;
+    busy += run;
+    p.remaining -= run;
+    switches++;
+
+    timeline.push({ name: p.name, start, end: time, color: p.color, quantum, run });
+    quantumEvents.push(`t=${start}: Q=${quantum} for ${p.name} (${mode === "adaptive" ? strategyLabel(strategy) : "fixed"})`);
+    events.push(`<b>${p.name}</b> ran from t=${start} to t=${time}, used ${run}/${quantum}, remaining ${p.remaining}`);
+
+    admit();
+    if (p.remaining === 0) {
+      p.completion = time;
+      events.push(`<strong>${p.name} completed at t=${time}</strong>`);
+    } else {
+      queue.push(p);
+    }
   }
 
-  sim.forEach(p => { p.tat = p.ct - p.arr; p.wt = p.tat - p.burst; });
-  const avgWT  = (sim.reduce((s,p)=>s+p.wt, 0) / sim.length).toFixed(2);
-  const avgTAT = (sim.reduce((s,p)=>s+p.tat,0) / sim.length).toFixed(2);
+  jobs.forEach(p => {
+    p.turnaround = p.completion - p.arrival;
+    p.waiting = p.turnaround - p.burst;
+    p.response = p.firstStart - p.arrival;
+  });
 
-  document.getElementById('sWT').textContent  = avgWT;
-  document.getElementById('sTAT').textContent = avgTAT;
-  document.getElementById('sCS').textContent  = cs;
-  document.getElementById('sTT').textContent  = time;
+  const total = Math.max(time, 1);
+  const avgWT = jobs.reduce((sum, p) => sum + p.waiting, 0) / jobs.length;
+  const avgTAT = jobs.reduce((sum, p) => sum + p.turnaround, 0) / jobs.length;
+  const avgRT = jobs.reduce((sum, p) => sum + p.response, 0) / jobs.length;
 
-  renderGantt(gantt, time);
-  renderLog(log);
-  renderTable(sim, avgWT, avgTAT);
-
-  document.getElementById('placeholder').style.display    = 'none';
-  document.getElementById('resultContent').style.display  = 'block';
+  return {
+    mode,
+    strategy,
+    fixedQ,
+    jobs,
+    timeline,
+    events,
+    quantumEvents,
+    avgWT,
+    avgTAT,
+    avgRT,
+    cpuUtil: busy / total * 100,
+    switches,
+    totalTime: time
+  };
 }
 
-function renderGantt(gantt, total) {
-  const unit = Math.max(16, Math.min(64, Math.floor(580 / Math.max(total, 1))));
-  const track = document.getElementById('ganttTrack');
-  track.innerHTML = gantt.map((b, i) => {
-    const w = (b.end - b.start) * unit;
-    return `<div class="g-blk" style="width:${w}px;background:${b.color};color:${b.dark};animation-delay:${i*0.025}s;">
-      ${w > 20 ? b.name : ''}
-      <span class="tooltip">${b.name} · t${b.start}–${b.end} · Q=${b.q}</span>
+function runSimulation() {
+  if (!processes.length) {
+    alert("Add at least one process first.");
+    return;
+  }
+  const strategy = $("strategy").value;
+  const fixedQ = $("fixedQ").value;
+  lastAdaptive = simulate("adaptive", { strategy, fixedQ });
+  lastFixed = simulate("fixed", { strategy, fixedQ });
+  renderAdaptiveResults(lastAdaptive);
+  renderComparison();
+}
+
+function renderEmptyResults() {
+  $("avgWT").textContent = "--";
+  $("avgTAT").textContent = "--";
+  $("cpuUse").textContent = "--";
+  $("switches").textContent = "--";
+  $("resultCaption").textContent = "Run the simulation to generate metrics";
+  $("gantt").innerHTML = "";
+  $("timeAxis").innerHTML = "";
+  $("resultRows").innerHTML = `<tr><td colspan="7">No simulation has been run yet.</td></tr>`;
+  $("eventLog").innerHTML = "Waiting for a run...";
+  $("quantumLog").innerHTML = "The adaptive quantum will appear here after every scheduling cycle.";
+}
+
+function renderAdaptiveResults(result) {
+  $("avgWT").textContent = fmt(result.avgWT);
+  $("avgTAT").textContent = fmt(result.avgTAT);
+  $("cpuUse").textContent = `${fmt(result.cpuUtil)}%`;
+  $("switches").textContent = result.switches;
+  $("resultCaption").textContent = `${strategyLabel(result.strategy)} | total time ${result.totalTime} units | avg response ${fmt(result.avgRT)}`;
+  renderGantt(result.timeline);
+  $("resultRows").innerHTML = result.jobs.map(p => `
+    <tr>
+      <td><span style="color:${p.color};font-weight:900;">${p.name}</span></td>
+      <td>${p.arrival}</td>
+      <td>${p.burst}</td>
+      <td>${p.completion}</td>
+      <td>${p.turnaround}</td>
+      <td>${p.waiting}</td>
+      <td>${p.response}</td>
+    </tr>
+  `).join("");
+  $("eventLog").innerHTML = result.events.join("<br>");
+  $("quantumLog").innerHTML = result.quantumEvents.join("<br>");
+}
+
+function renderGantt(timeline) {
+  const total = Math.max(...timeline.map(t => t.end), 1);
+  const unit = Math.max(24, Math.min(58, Math.floor(840 / total)));
+  $("gantt").innerHTML = timeline.map(t => {
+    const width = Math.max(38, (t.end - t.start) * unit);
+    const idleClass = t.color === "idle" ? " idle" : "";
+    const bg = t.color === "idle" ? "" : `background:${t.color};`;
+    return `<div class="gantt-block${idleClass}" style="width:${width}px;${bg}">
+      ${width > 42 ? t.name : ""}
+      <span class="tip">${t.name}: t${t.start}-${t.end}${t.quantum ? ` | Q=${t.quantum}` : ""}</span>
     </div>`;
-  }).join('');
+  }).join("");
 
-  const times = [...new Set([0, ...gantt.map(b => b.end)])].sort((a,b)=>a-b);
-  document.getElementById('ganttTimes').innerHTML = times.map((t, i) => {
-    const w = i === 0 ? 0 : (times[i] - times[i-1]) * unit;
-    return `<span style="display:inline-block;min-width:${w}px;">${t}</span>`;
-  }).join('');
+  const marks = [timeline[0]?.start || 0, ...timeline.map(t => t.end)];
+  $("timeAxis").innerHTML = marks.map((time, i) => {
+    const width = i === 0 ? 38 : Math.max(38, (marks[i] - marks[i - 1]) * unit);
+    return `<span style="width:${width}px;">${time}</span>`;
+  }).join("");
 }
 
-function renderLog(log) {
-  document.getElementById('logScroll').innerHTML = log.map(l =>
-    `<div class="${l.type === 'done' ? 'log-done' : l.type === 'q' ? 'log-q' : 'log-run'}">${l.text}</div>`
-  ).join('');
+function renderBars(target, result, fixed = false) {
+  if (!result) {
+    target.innerHTML = `<div class="empty">No comparison data yet.</div>`;
+    return;
+  }
+  const maxValue = Math.max(...result.jobs.flatMap(p => [p.waiting, p.turnaround, p.response]), 1);
+  target.innerHTML = result.jobs.map(p => `
+    <div class="bar-row">
+      <span>${p.name} WT</span>
+      <div class="bar-track"><div class="bar-fill ${fixed ? "fixed" : ""}" style="width:${(p.waiting / maxValue) * 100}%"></div></div>
+      <strong>${p.waiting}</strong>
+    </div>
+    <div class="bar-row">
+      <span>${p.name} TAT</span>
+      <div class="bar-track"><div class="bar-fill ${fixed ? "fixed" : ""}" style="width:${(p.turnaround / maxValue) * 100}%"></div></div>
+      <strong>${p.turnaround}</strong>
+    </div>
+  `).join("");
 }
 
-function renderTable(sim, avgWT, avgTAT) {
-  document.getElementById('resTbl').innerHTML = sim.map(p =>
-    `<tr>
-      <td style="color:${p.color};font-weight:500;">${p.name}</td>
-      <td>${p.burst}</td><td>${p.arr}</td><td>${p.ct}</td>
-      <td>${p.tat}</td><td>${p.wt}</td>
-    </tr>`
-  ).join('') + `<tr class="avg-row">
-    <td colspan="4" style="color:var(--muted);">Averages</td>
-    <td class="val">${avgTAT}</td>
-    <td class="val">${avgWT}</td>
-  </tr>`;
+function renderComparison() {
+  $("adaptiveFormulaName").textContent = strategyLabel($("strategy").value);
+  $("fixedLabel").textContent = `Quantum = ${Math.max(1, Number.parseInt($("fixedQ").value, 10) || 4)}`;
+
+  if (!lastAdaptive || !lastFixed) {
+    $("cmpAWT").textContent = "--";
+    $("cmpATAT").textContent = "--";
+    $("cmpFWT").textContent = "--";
+    $("cmpFTAT").textContent = "--";
+    renderBars($("adaptiveBars"), null);
+    renderBars($("fixedBars"), null, true);
+    $("verdict").textContent = "Run a comparison to see which scheduler performs better for the current inputs.";
+    return;
+  }
+
+  $("cmpAWT").textContent = fmt(lastAdaptive.avgWT);
+  $("cmpATAT").textContent = fmt(lastAdaptive.avgTAT);
+  $("cmpFWT").textContent = fmt(lastFixed.avgWT);
+  $("cmpFTAT").textContent = fmt(lastFixed.avgTAT);
+  renderBars($("adaptiveBars"), lastAdaptive);
+  renderBars($("fixedBars"), lastFixed, true);
+
+  const wtDelta = lastFixed.avgWT - lastAdaptive.avgWT;
+  const tatDelta = lastFixed.avgTAT - lastAdaptive.avgTAT;
+  const better = wtDelta > 0 || tatDelta > 0;
+  $("verdict").innerHTML = better
+    ? `Adaptive RR performs better on this workload: waiting time improves by ${fmt(Math.max(0, wtDelta))} units and turnaround improves by ${fmt(Math.max(0, tatDelta))} units compared with fixed RR.`
+    : `Fixed RR is equal or better for this workload. Try changing the fixed quantum or using a more mixed set of burst times to observe where adaptive quantum selection helps.`;
 }
 
-document.getElementById('pBurst').addEventListener('keydown', e => { if (e.key==='Enter') addProc(); });
-document.getElementById('pName').addEventListener('keydown',  e => { if (e.key==='Enter') document.getElementById('pBurst').focus(); });
+document.querySelectorAll("[data-page]").forEach(btn => {
+  btn.addEventListener("click", () => showPage(btn.dataset.page));
+});
+
+document.querySelectorAll("[data-page-jump]").forEach(btn => {
+  btn.addEventListener("click", () => showPage(btn.dataset.pageJump));
+});
+
+$("addBtn").addEventListener("click", addProcess);
+$("demoBtn").addEventListener("click", loadDemo);
+$("clearBtn").addEventListener("click", clearAll);
+$("runTopBtn").addEventListener("click", runSimulation);
+$("compareBtn").addEventListener("click", () => {
+  if (!processes.length) loadDemo();
+  else runSimulation();
+  showPage("compare");
+});
+$("pBurst").addEventListener("keydown", event => {
+  if (event.key === "Enter") addProcess();
+});
+$("strategy").addEventListener("change", () => {
+  if (processes.length && lastAdaptive) runSimulation();
+  else renderComparison();
+});
+$("fixedQ").addEventListener("change", () => {
+  if (processes.length && lastAdaptive) runSimulation();
+  else renderComparison();
+});
+
+renderProcesses();
+renderEmptyResults();
+loadDemo();
 </script>
 </body>
 </html>
